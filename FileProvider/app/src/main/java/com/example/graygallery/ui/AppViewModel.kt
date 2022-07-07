@@ -28,6 +28,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.example.graygallery.R
 import com.example.graygallery.utils.Source
+import com.example.graygallery.utils.applyGrayscaleFilter
 import com.example.graygallery.utils.copyImageFromStream
 import com.example.graygallery.utils.generateFilename
 import com.example.graygallery.utils.applyGrayscaleFilter
@@ -38,10 +39,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 
 private const val FILEPATH_XML_KEY = "files-path"
 private const val RANDOM_IMAGE_URL = "https://source.unsplash.com/random/500x500"
 val ACCEPTED_MIMETYPES = arrayOf("image/jpeg", "image/png")
+val RAR_MIMETYPES = arrayOf("application/x-rar-compressed", "application/octet-stream")
+val ZIP_MIMETYPES = arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed", "multipart/x-zip")
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val httpClient by lazy { OkHttpClient() }
@@ -99,6 +105,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // TODO: Apply grayscale filter before saving image
                     copyImageFromStream(it, imagesFolder)
                     _notification.postValue("Image copied")
+                }
+            }
+        }
+    }
+
+
+    fun unzip(uri: Uri) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.let {
+                    try {
+                        val zin = ZipInputStream(it)
+                        var ze: ZipEntry? = null
+                        while (zin.nextEntry.also { ze = it } != null) {
+
+                            /** Create directory if required while unzipping */
+                            if (ze?.isDirectory == true) {
+                                val file = File("${context.filesDir}/${ze?.name}")
+
+                                println("Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
+
+                            } else {
+                                /** Create file while unzipping */
+                                val file = File("${context.filesDir}/${ze?.name}")
+
+                                println("Is file created at path : ${file.absolutePath} : ${file.createNewFile()}")
+
+                                val fout = FileOutputStream(file)
+                                var c = zin.read()
+                                while (c != -1) {
+                                    fout.write(c)
+                                    c = zin.read()
+                                }
+                                zin.closeEntry()
+                                fout.close()
+                            }
+                        }
+                        zin.close()
+
+                        println("Unzip Successful!!!")
+
+                    } catch (e: IOException) {
+                        println("IOException: ${e.message}")
+                    }
                 }
             }
         }

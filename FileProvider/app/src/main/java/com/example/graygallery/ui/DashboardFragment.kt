@@ -48,6 +48,12 @@ class DashboardFragment : Fragment() {
         }
     }
 
+    private val unZipFiles = registerForActivityResult(GetContentWithMimeTypes()) { uri ->
+        uri?.let {
+            viewModel.unzip(uri)
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -63,6 +69,10 @@ class DashboardFragment : Fragment() {
 
         binding.selectPicture.setOnClickListener {
             selectPicture.launch(ACCEPTED_MIMETYPES)
+        }
+
+        binding.unZipFiles.setOnClickListener {
+            unZipFiles.launch(ZIP_MIMETYPES)
         }
 
         binding.addRandomImage.setOnClickListener {
