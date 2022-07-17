@@ -31,7 +31,6 @@ import com.example.graygallery.utils.Source
 import com.example.graygallery.utils.applyGrayscaleFilter
 import com.example.graygallery.utils.copyImageFromStream
 import com.example.graygallery.utils.generateFilename
-import com.example.graygallery.utils.applyGrayscaleFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,6 +47,7 @@ private const val RANDOM_IMAGE_URL = "https://source.unsplash.com/random/500x500
 val ACCEPTED_MIMETYPES = arrayOf("image/jpeg", "image/png")
 val RAR_MIMETYPES = arrayOf("application/x-rar-compressed", "application/octet-stream")
 val ZIP_MIMETYPES = arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed", "multipart/x-zip")
+private const val TAG = "msg"
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val httpClient by lazy { OkHttpClient() }
@@ -114,23 +114,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun unzip(uri: Uri) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
+                Log.d(TAG, "IO ${Thread.currentThread().name}")
                 context.contentResolver.openInputStream(uri)?.let {
+
                     try {
                         val zin = ZipInputStream(it)
                         var ze: ZipEntry? = null
+
                         while (zin.nextEntry.also { ze = it } != null) {
+                            Log.d(TAG, "unzip(): Unzipping file path: ${ze?.name}")
 
                             /** Create directory if required while unzipping */
+                            createDir(ze?.name ?: "")
+
                             if (ze?.isDirectory == true) {
+                                Log.d(TAG, "Create directory if required while unzipping")
                                 val file = File("${context.filesDir}/${ze?.name}")
 
-                                println("Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
+                                Log.d(TAG,"Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
 
                             } else {
                                 /** Create file while unzipping */
                                 val file = File("${context.filesDir}/${ze?.name}")
 
-                                println("Is file created at path : ${file.absolutePath} : ${file.createNewFile()}")
+                                Log.d(TAG, "Is file created at path : ${file.absolutePath} : ${file.createNewFile()}")
 
                                 val fout = FileOutputStream(file)
                                 var c = zin.read()
@@ -144,13 +151,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         zin.close()
 
-                        println("Unzip Successful!!!")
+                        Log.d(TAG,"Unzip Successful!!!")
 
                     } catch (e: IOException) {
-                        println("IOException: ${e.message}")
+                        Log.e(TAG,"IOException: ${e.message}")
                     }
                 }
             }
+        }
+    }
+
+    private fun createDir(path: String) {
+        var file = File("${context.filesDir}")
+
+        var folderList = path.split(File.separator)
+        folderList = folderList.subList(0, folderList.size - 1)
+
+        folderList.forEach {
+            file = File("${file.path}/$it")
+            Log.d(TAG, "createDir(): Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
         }
     }
 
