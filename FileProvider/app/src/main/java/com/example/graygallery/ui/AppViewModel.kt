@@ -36,9 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+import java.io.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
@@ -111,7 +109,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun unzip(uri: Uri) {
+    /**
+     * Unzip speed is low. Its ok to use unzipping document files
+     */
+    fun unzipDocumentFiles(uri: Uri) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 Log.d(TAG, "IO ${Thread.currentThread().name}")
@@ -131,7 +132,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 Log.d(TAG, "Create directory if required while unzipping")
                                 val file = File("${context.filesDir}/${ze?.name}")
 
-                                Log.d(TAG,"Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
+                                Log.d(TAG, "Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
 
                             } else {
                                 /** Create file while unzipping */
@@ -151,10 +152,65 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         zin.close()
 
-                        Log.d(TAG,"Unzip Successful!!!")
+                        Log.d(TAG, "Unzip Successful!!!")
 
                     } catch (e: IOException) {
-                        Log.e(TAG,"IOException: ${e.message}")
+                        Log.e(TAG, "IOException: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Faster in unzipping large media files
+     */
+    fun unzipMediaFiles(uri: Uri) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "IO ${Thread.currentThread().name}")
+                context.contentResolver.openInputStream(uri)?.let {
+
+                    try {
+                        val zipInputStream = ZipInputStream(it)
+                        val bufferedInputStream = BufferedInputStream(zipInputStream)
+                        var zipEntry: ZipEntry? = null
+
+                        while (zipInputStream.nextEntry.also { zipEntry = it } != null) {
+                            Log.d(TAG, "unzip(): Unzipping file path: ${zipEntry?.name}")
+
+                            /** Create directory if required while unzipping */
+                            createDir(zipEntry?.name ?: "")
+
+                            if (zipEntry?.isDirectory == true) {
+                                Log.d(TAG, "Create directory if required while unzipping")
+                                val file = File("${context.cacheDir}/${zipEntry?.name}")
+
+                                Log.d(TAG, "Is directory created at Path: ${file.absolutePath} : ${file.mkdir()}")
+
+                            } else {
+                                /** Create file while unzipping */
+                                val file = File("${context.cacheDir}/${zipEntry?.name}")
+
+                                Log.d(TAG, "Is file created at path : ${file.absolutePath} : ${file.createNewFile()}")
+
+                                val bufferedOutputStream = BufferedOutputStream(FileOutputStream(file))
+                                val buffer = ByteArray(1024)
+                                var read = 0
+                                while (bufferedInputStream.read(buffer).also { read = it } != -1) {
+                                    bufferedOutputStream.write(buffer, 0, read)
+                                }
+                                zipInputStream.closeEntry()
+                                bufferedOutputStream.close()
+                            }
+                        }
+                        zipInputStream.close()
+
+                        Log.d(TAG, "Unzip Successful!!!")
+
+                    } catch (e: IOException) {
+                        Log.e(TAG, "IOException: ${e.message}")
                     }
                 }
             }
@@ -194,6 +250,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteCache(context: Context) {
+        try {
+            val dir = context.cacheDir
+            deleteDir(dir)
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun deleteDir(dir: File?): Boolean {
+        return if (dir != null && dir.isDirectory) {
+            val children = dir.list()
+            for (i in children.indices) {
+                val success = deleteDir(File(dir, children[i]))
+                if (!success) {
+                    return false
+                }
+            }
+            dir.delete()
+        } else if (dir != null && dir.isFile) {
+            dir.delete()
+        } else {
+            false
+        }
+    }
+
     fun clearFiles() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
@@ -210,8 +292,7 @@ private fun getImagesFolder(context: Context): File {
 
     val attributes = getAttributesFromXmlNode(xml, FILEPATH_XML_KEY)
 
-    val folderPath = attributes["path"]
-        ?: error("You have to specify the sharable directory in res/xml/filepaths.xml")
+    val folderPath = attributes["path"] ?: error("You have to specify the sharable directory in res/xml/filepaths.xml")
 
     return File(context.filesDir, folderPath).also {
         if (!it.exists()) {
@@ -221,10 +302,7 @@ private fun getImagesFolder(context: Context): File {
 }
 
 // TODO: Make the function suspend
-private fun getAttributesFromXmlNode(
-    xml: XmlResourceParser,
-    nodeName: String
-): Map<String, String> {
+private fun getAttributesFromXmlNode(xml: XmlResourceParser, nodeName: String): Map<String, String> {
     while (xml.eventType != XmlResourceParser.END_DOCUMENT) {
         if (xml.eventType == XmlResourceParser.START_TAG) {
             if (xml.name == nodeName) {

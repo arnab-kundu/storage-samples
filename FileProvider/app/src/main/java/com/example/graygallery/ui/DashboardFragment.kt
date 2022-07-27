@@ -50,7 +50,8 @@ class DashboardFragment : Fragment() {
 
     private val unZipFiles = registerForActivityResult(GetContentWithMimeTypes()) { uri ->
         uri?.let {
-            viewModel.unzip(uri)
+            //viewModel.unzipDocumentFiles(uri)
+            viewModel.unzipMediaFiles(uri)
         }
     }
 
